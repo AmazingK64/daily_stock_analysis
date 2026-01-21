@@ -544,7 +544,7 @@ def render_base(
 ) -> str:
     """
     渲染基础 HTML 模板
-    
+
     Args:
         title: 页面标题
         content: 页面内容 HTML
@@ -569,7 +569,7 @@ def render_base(
 def render_toast(message: str, toast_type: str = "success") -> str:
     """
     渲染 Toast 通知
-    
+
     Args:
         message: 通知消息
         toast_type: 类型 (success, error, warning)
@@ -581,7 +581,7 @@ def render_toast(message: str, toast_type: str = "success") -> str:
     }
     icon = icon_map.get(toast_type, "ℹ️")
     type_class = f" {toast_type}" if toast_type != "success" else ""
-    
+
     return f"""
     <div id="toast" class="toast show{type_class}">
         <span class="icon">{icon}</span> {html.escape(message)}
@@ -601,7 +601,7 @@ def render_config_page(
 ) -> bytes:
     """
     渲染配置页面
-    
+
     Args:
         stock_list: 当前自选股列表
         env_filename: 环境文件名
@@ -609,7 +609,7 @@ def render_config_page(
     """
     safe_value = html.escape(stock_list)
     toast_html = render_toast(message) if message else ""
-    
+
     # 分析组件的 JavaScript - 支持多任务
     analysis_js = """
 <script>
@@ -617,14 +617,14 @@ def render_config_page(
     const codeInput = document.getElementById('analysis_code');
     const submitBtn = document.getElementById('analysis_btn');
     const taskList = document.getElementById('task_list');
-    
+
     // 任务管理
     const tasks = new Map(); // taskId -> {task, pollCount}
     let pollInterval = null;
     const MAX_POLL_COUNT = 120; // 6 分钟超时：120 * 3000ms = 360000ms
     const POLL_INTERVAL_MS = 3000;
     const MAX_TASKS_DISPLAY = 10;
-    
+
     // 允许输入数字和字母（支持港股 hkxxxxx 格式）
     codeInput.addEventListener('input', function(e) {
         // 转小写，只保留字母和数字
@@ -634,7 +634,7 @@ def render_config_page(
         }
         updateButtonState();
     });
-    
+
     // 回车提交
     codeInput.addEventListener('keypress', function(e) {
         if (e.key === 'Enter') {
@@ -644,7 +644,7 @@ def render_config_page(
             }
         }
     });
-    
+
     // 更新按钮状态 - 支持 A股(6位数字) 或 港股(hk+5位数字)
     function updateButtonState() {
         const code = codeInput.value.trim().toLowerCase();
@@ -652,14 +652,14 @@ def render_config_page(
         const isHKStock = /^hk\\d{5}$/.test(code);        // 港股: hk00700
         submitBtn.disabled = !(isAStock || isHKStock);
     }
-    
+
     // 格式化时间
     function formatTime(isoString) {
         if (!isoString) return '-';
         const date = new Date(isoString);
         return date.toLocaleTimeString('zh-CN', {hour: '2-digit', minute: '2-digit', second: '2-digit'});
     }
-    
+
     // 计算耗时
     function calcDuration(start, end) {
         if (!start) return '-';
@@ -671,7 +671,7 @@ def render_config_page(
         const remainSec = seconds % 60;
         return minutes + 'm' + remainSec + 's';
     }
-    
+
     // 获取建议样式类
     function getAdviceClass(advice) {
         if (!advice) return '';
@@ -680,20 +680,20 @@ def render_config_page(
         if (advice.includes('持有')) return 'hold';
         return 'wait';
     }
-    
+
     // 渲染单个任务卡片
     function renderTaskCard(taskId, taskData) {
         const task = taskData.task || {};
         const status = task.status || 'pending';
         const code = task.code || taskId.split('_')[0];
         const result = task.result || {};
-        
+
         let statusIcon = '⏳';
         let statusText = '等待中';
         if (status === 'running') { statusIcon = '<span class="spinner"></span>'; statusText = '分析中'; }
         else if (status === 'completed') { statusIcon = '✓'; statusText = '完成'; }
         else if (status === 'failed') { statusIcon = '✗'; statusText = '失败'; }
-        
+
         let resultHtml = '';
         if (status === 'completed' && result.operation_advice) {
             const adviceClass = getAdviceClass(result.operation_advice);
@@ -704,15 +704,15 @@ def render_config_page(
         } else if (status === 'failed') {
             resultHtml = '<div class="task-result"><span class="task-advice sell">失败</span></div>';
         }
-        
+
         let detailHtml = '';
         if (status === 'completed' && result.name) {
             detailHtml = '<div class="task-detail" id="detail_' + taskId + '">' +
                 '<div class="task-detail-row"><span class="label">趋势</span><span>' + (result.trend_prediction || '-') + '</span></div>' +
-                (result.analysis_summary ? '<div class="task-detail-summary">' + result.analysis_summary.substring(0, 100) + '...</div>' : '') +
+                (result.analysis_summary ? '<div class="task-detail-summary">' + result.analysis_summary + '</div>' : '') +
                 '</div>';
         }
-        
+
         return '<div class="task-card ' + status + '" id="task_' + taskId + '" onclick="toggleDetail(\\''+taskId+'\\')">' +
             '<div class="task-status">' + statusIcon + '</div>' +
             '<div class="task-main">' +
@@ -731,29 +731,29 @@ def render_config_page(
             '</div>' +
         '</div>' + detailHtml;
     }
-    
+
     // 渲染所有任务
     function renderAllTasks() {
         if (tasks.size === 0) {
             taskList.innerHTML = '<div class="task-hint">💡 输入股票代码开始分析</div>';
             return;
         }
-        
+
         let html = '';
         const sortedTasks = Array.from(tasks.entries())
             .sort((a, b) => (b[1].task?.start_time || '').localeCompare(a[1].task?.start_time || ''));
-        
+
         sortedTasks.slice(0, MAX_TASKS_DISPLAY).forEach(([taskId, taskData]) => {
             html += renderTaskCard(taskId, taskData);
         });
-        
+
         if (sortedTasks.length > MAX_TASKS_DISPLAY) {
             html += '<div class="task-hint">... 还有 ' + (sortedTasks.length - MAX_TASKS_DISPLAY) + ' 个任务</div>';
         }
-        
+
         taskList.innerHTML = html;
     }
-    
+
     // 切换详情显示
     window.toggleDetail = function(taskId) {
         const detail = document.getElementById('detail_' + taskId);
@@ -761,31 +761,31 @@ def render_config_page(
             detail.classList.toggle('show');
         }
     };
-    
+
     // 移除任务
     window.removeTask = function(taskId) {
         tasks.delete(taskId);
         renderAllTasks();
         checkStopPolling();
     };
-    
+
     // 轮询所有运行中的任务
     function pollAllTasks() {
         let hasRunning = false;
-        
+
         tasks.forEach((taskData, taskId) => {
             const status = taskData.task?.status;
             if (status === 'running' || status === 'pending' || !status) {
                 hasRunning = true;
                 taskData.pollCount = (taskData.pollCount || 0) + 1;
-                
+
                 if (taskData.pollCount > MAX_POLL_COUNT) {
                     taskData.task = taskData.task || {};
                     taskData.task.status = 'failed';
                     taskData.task.error = '轮询超时';
                     return;
                 }
-                
+
                 fetch('/task?id=' + encodeURIComponent(taskId))
                     .then(r => r.json())
                     .then(data => {
@@ -797,12 +797,12 @@ def render_config_page(
                     .catch(() => {});
             }
         });
-        
+
         if (!hasRunning) {
             checkStopPolling();
         }
     }
-    
+
     // 检查是否需要停止轮询
     function checkStopPolling() {
         let hasRunning = false;
@@ -812,33 +812,33 @@ def render_config_page(
                 hasRunning = true;
             }
         });
-        
+
         if (!hasRunning && pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
         }
     }
-    
+
     // 开始轮询
     function startPolling() {
         if (!pollInterval) {
             pollInterval = setInterval(pollAllTasks, POLL_INTERVAL_MS);
         }
     }
-    
+
     // 提交分析
     window.submitAnalysis = function() {
         const code = codeInput.value.trim().toLowerCase();
         const isAStock = /^\d{6}$/.test(code);
         const isHKStock = /^hk\d{5}$/.test(code);
-        
+
         if (!(isAStock || isHKStock)) {
             return;
         }
-        
+
         submitBtn.disabled = true;
         submitBtn.textContent = '提交中...';
-        
+
         fetch('/analysis?code=' + encodeURIComponent(code))
             .then(response => response.json())
             .then(data => {
@@ -852,11 +852,11 @@ def render_config_page(
                         },
                         pollCount: 0
                     });
-                    
+
                     renderAllTasks();
                     startPolling();
                     codeInput.value = '';
-                    
+
                     // 立即轮询一次
                     setTimeout(() => {
                         fetch('/task?id=' + encodeURIComponent(taskId))
@@ -881,25 +881,25 @@ def render_config_page(
                 updateButtonState();
             });
     };
-    
+
     // 初始化
     updateButtonState();
     renderAllTasks();
 })();
 </script>
 """
-    
+
     content = f"""
   <div class="container">
     <h2>📈 A/H股分析</h2>
-    
+
     <!-- 快速分析区域 -->
     <div class="analysis-section" style="margin-top: 0; padding-top: 0; border-top: none;">
       <div class="form-group" style="margin-bottom: 0.75rem;">
         <div class="input-group">
-          <input 
-              type="text" 
-              id="analysis_code" 
+          <input
+              type="text"
+              id="analysis_code"
               placeholder="A股 600519 / 港股 hk00700"
               maxlength="8"
               autocomplete="off"
@@ -909,37 +909,37 @@ def render_config_page(
           </button>
         </div>
       </div>
-      
+
       <!-- 任务列表 -->
       <div id="task_list" class="task-list"></div>
     </div>
-    
+
     <hr class="section-divider">
-    
+
     <!-- 自选股配置区域 -->
     <form method="post" action="/update">
       <div class="form-group">
         <label for="stock_list">📋 自选股列表 <span class="code-badge">{html.escape(env_filename)}</span></label>
         <p>仅用于本地环境 (127.0.0.1) • 安全修改 .env 配置</p>
-        <textarea 
-            id="stock_list" 
-            name="stock_list" 
-            rows="4" 
+        <textarea
+            id="stock_list"
+            name="stock_list"
+            rows="4"
             placeholder="例如: 600519, 000001 (逗号或换行分隔)"
         >{safe_value}</textarea>
       </div>
       <button type="submit">💾 保存</button>
     </form>
-    
+
     <div class="footer">
       <p>API: <code>/health</code> · <code>/analysis?code=xxx</code> · <code>/tasks</code></p>
     </div>
   </div>
-  
+
   {toast_html}
   {analysis_js}
 """
-    
+
     page = render_base(
         title="A/H股自选配置 | WebUI",
         content=content
@@ -954,14 +954,14 @@ def render_error_page(
 ) -> bytes:
     """
     渲染错误页面
-    
+
     Args:
         status_code: HTTP 状态码
         message: 错误消息
         details: 详细信息
     """
     details_html = f"<p class='text-muted'>{html.escape(details)}</p>" if details else ""
-    
+
     content = f"""
   <div class="container" style="text-align: center;">
     <h2>😵 {status_code}</h2>
@@ -970,7 +970,7 @@ def render_error_page(
     <a href="/" style="color: var(--primary); text-decoration: none;">← 返回首页</a>
   </div>
 """
-    
+
     page = render_base(
         title=f"错误 {status_code}",
         content=content
